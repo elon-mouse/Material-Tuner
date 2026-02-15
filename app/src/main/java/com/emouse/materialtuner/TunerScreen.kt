@@ -170,20 +170,25 @@ private fun TunerMeter(
         label = "needle"
     )
 
+    // Map -20..+20 -> 0..1
     val position = (animatedCents + 20f) / 40f
+
+    val containerHorizontalPadding = 24.dp
+    val trackHeight = 40.dp
+    val needleWidth = 14.dp
+    val needleHeight = 65.dp
 
     Surface(
         modifier = modifier.height(100.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         shape = RoundedCornerShape(30.dp)
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = containerHorizontalPadding),
             contentAlignment = Alignment.Center
         ) {
-
             val gradient = Brush.horizontalGradient(
                 listOf(
                     MaterialTheme.colorScheme.error,
@@ -194,26 +199,29 @@ private fun TunerMeter(
                 )
             )
 
+            // Track (always centered)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp)
+                    .height(trackHeight)
                     .clip(RoundedCornerShape(100.dp))
                     .background(gradient)
             )
 
-            Box(modifier = Modifier.fillMaxWidth()) {
-                val offset = ((position * 280f) - 140f).dp
+            // Needle (positioned relative to available width, clamped)
+            val trackWidth = maxWidth
+            val needleOffset = (trackWidth - needleWidth) * position
 
-                Surface(
-                    modifier = Modifier
-                        .offset(x = offset)
-                        .width(14.dp)
-                        .height(65.dp),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    shape = RoundedCornerShape(10.dp)
-                ) {}
-            }
+            Surface(
+                modifier = Modifier
+                    .offset(x = needleOffset.coerceIn(0.dp, trackWidth - needleWidth))
+                    .align(Alignment.CenterStart)
+                    .width(needleWidth)
+                    .height(needleHeight),
+                color = MaterialTheme.colorScheme.onSurface,
+                shape = RoundedCornerShape(10.dp)
+            ) {}
         }
     }
 }
+
