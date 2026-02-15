@@ -1,7 +1,13 @@
 package com.emouse.materialtuner
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
@@ -14,18 +20,29 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
-import androidx.compose.foundation.layout.systemBarsPadding
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TunerScreen() {
 
-    var note by remember { mutableStateOf("G") }
-    var hz by remember { mutableStateOf(196.0) }
-    var cents by remember { mutableStateOf(-12f) }
-    var isListening by remember { mutableStateOf(true) }
+    val engine = remember { TunerEngine() }
+    DisposableEffect(Unit) {
+        onDispose { engine.stop() }
+    }
+
+    var uiState by remember { mutableStateOf(TunerState()) }
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        engine.setMicPermission(granted)
+    }
+
+    LaunchedEffect(Unit) {
+        engine.state.collectLatest { uiState = it }
+    }
 
     Scaffold(
         topBar = {
@@ -51,16 +68,15 @@ fun TunerScreen() {
 
             Spacer(Modifier.height(40.dp))
 
-            // NOTE
             Text(
-                text = note,
+                text = uiState.note,
                 fontSize = 96.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground
             )
 
             Text(
-                text = String.format("%.1f Hz", hz),
+                text = if (uiState.hz > 0) String.format("%.1f Hz", uiState.hz) else "-- Hz",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
             )
@@ -68,22 +84,27 @@ fun TunerScreen() {
             Spacer(Modifier.height(32.dp))
 
             StatusBadge(
-                cents = cents,
+                cents = uiState.cents,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(32.dp))
 
             TunerMeter(
-                cents = cents,
+                cents = uiState.cents,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.weight(1f))
 
-            // Start / Stop button
             FilledTonalButton(
-                onClick = { isListening = !isListening },
+                onClick = {
+                    if (!uiState.hasMicPermission) {
+                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        return@FilledTonalButton
+                    }
+                    if (uiState.isListening) engine.stop() else engine.start()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 28.dp)
@@ -91,7 +112,7 @@ fun TunerScreen() {
                 shape = RoundedCornerShape(28.dp)
             ) {
                 Text(
-                    if (isListening) "Stop" else "Start",
+                    text = if (uiState.isListening) "Stop" else "Start",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -137,8 +158,19 @@ private fun TunerMeter(
     cents: Float,
     modifier: Modifier = Modifier
 ) {
-    val clamped = cents.coerceIn(-20f, 20f)
-    val position = (clamped + 20f) / 40f
+    // Animate cents so the needle glides instead of jumping
+    val target = cents.coerceIn(-20f, 20f)
+
+    val animatedCents by animateFloatAsState(
+        targetValue = target,
+        animationSpec = spring(
+            stiffness = 500f,
+            dampingRatio = 0.85f
+        ),
+        label = "needle"
+    )
+
+    val position = (animatedCents + 20f) / 40f
 
     Surface(
         modifier = modifier.height(100.dp),
@@ -170,10 +202,7 @@ private fun TunerMeter(
                     .background(gradient)
             )
 
-            // Needle
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 val offset = ((position * 280f) - 140f).dp
 
                 Surface(
