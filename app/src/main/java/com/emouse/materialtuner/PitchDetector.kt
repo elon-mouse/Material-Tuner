@@ -82,7 +82,7 @@ object PitchDetector {
         }
 
         // Confidence gate (tune if needed)
-        if (bestLag <= 0 || bestCorr < 0.6) return 0.0
+        if (bestLag <= 0 || bestCorr < 0.75) return 0.0
 
         // Optional: small parabolic refinement around bestLag
         // (improves accuracy a bit without FFT)
